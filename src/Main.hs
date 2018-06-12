@@ -16,25 +16,24 @@ import Control.Applicative as A
 main :: IO ()
 main =
   do let
-        testTreeL w h = Deep.force (tree1L w h)
-        testTreeS w h = Deep.force (tree1S w h) 
-        w1 = 8
-        h1 = 6
-        w2 = 10000
-        h2 = 1
-        l1 = show w1 ++ " ** " ++ show h1
-        l2 = show w2 ++ " ** " ++ show h2
-     defaultMain 
-      [
-         bgroup "get tree edges as List"
-               [ bench l1 $ nf edgesList (testTreeL w1 h1)
-               , bench l2 $ nf edgesList (testTreeL w2 h2)
-               ]
-        , bgroup "get tree edges as Seq"
-               [ bench l1 $ nf edgesSeq (testTreeS w1 h1)
-               , bench l2 $ nf edgesSeq (testTreeS w2 h2)
-               ]
-      ]
+        testRuns = [(1,1), (2,2), (4,4), (8,5), (10,3), (100,2), (100000,1)]
+       
+        myBenchGroup (w, h) = 
+          bgroup ("children per node: " ++ show w ++ ", depth: " ++ show h)
+          [ seqBench
+          , seqUnstableBench
+          , listBench
+          ]
+          where
+            myBench l f g = do
+              let t = Deep.force (f w h)
+              bench l (nf g t)
+
+            seqBench = myBench "Seq stableSort" tree1S edgesSeq 
+            seqUnstableBench = myBench "Seq unstableSort" tree1S edgesSeq 
+            listBench = myBench "List" tree1L edgesList 
+
+     defaultMain (myBenchGroup <$> testRuns)
 
 data MyThingy = MyThingy Int Bool Double Integer
    deriving (Read, Show, Eq, Ord, NFData, Generic)
@@ -44,8 +43,14 @@ data MyThingy = MyThingy Int Bool Double Integer
 data TreeS a = NodeS a (Seq (TreeS a))
    deriving (Read, Show, Eq, Ord, NFData, Generic)
 
-edgesSeq :: TreeS a -> Seq (a, a)
-edgesSeq t = go t S.empty
+edgesSeq :: Ord a => TreeS a -> Seq (a, a)
+edgesSeq t = S.sort $ go t S.empty
+  where 
+    go (NodeS pl cs) acc = 
+      foldr (\c@(NodeS cl _ccs) a -> (pl, cl) <| go c a) acc cs
+
+edgesSeqUnstable :: Ord a => TreeS a -> Seq (a, a)
+edgesSeqUnstable t = S.unstableSort $ go t S.empty
   where 
     go (NodeS pl cs) acc = 
       foldr (\c@(NodeS cl _ccs) a -> (pl, cl) <| go c a) acc cs
@@ -63,8 +68,8 @@ tree1S w h =
 data TreeL a = NodeL a [TreeL a]
    deriving (Read, Show, Eq, Ord, NFData, Generic)
 
-edgesList :: TreeL a -> [(a, a)]
-edgesList t = go t []
+edgesList :: Ord a => TreeL a -> [(a, a)]
+edgesList t = L.sort $ go t []
  where 
   go (NodeL pl cs) acc =
     foldr (\c@(NodeL cl _ccs) a -> (pl, cl) : go c a) acc cs

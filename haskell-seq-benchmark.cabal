@@ -21,4 +21,4 @@ executable haskell-seq-benchmark
                      , containers
                      , criterion
                      , deepseq
-  ghc-options: -O2 
+  ghc-options: -O 
